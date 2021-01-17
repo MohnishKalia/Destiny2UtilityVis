@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DestinyInventoryItemDefinition, getDestinyManifest, getDestinyManifestSlice, HttpClient, HttpClientConfig, TierType } from 'bungie-api-ts/destiny2';
+import { getDestinyManifest, getDestinyManifestSlice, HttpClient, HttpClientConfig } from 'bungie-api-ts/destiny2';
 import RJW from 'react-json-view';
 import './App.css';
 
@@ -44,18 +44,16 @@ function App() {
         const hash = Object.values(manifestTables.DestinyItemCategoryDefinition).find(def => def.shortTitle === cat)?.hash;
         if (hash)
           payload[cat] = Object.values(manifestTables.DestinyInventoryItemDefinition)
-            .filter(def => def.itemCategoryHashes?.includes(hash) && tiers.includes(def.inventory?.tierType ?? 0))
+            .filter(def => def.itemCategoryHashes?.includes(hash) && tiers.includes(def.inventory?.tierType ?? 0)) // is a legendary/exotic armor or weapon
             .flatMap(def => 
                 def.quality?.versions.map(ver => ({
                   name: def.displayProperties.name,
                   description: def.displayProperties.description,
                   powerCap: manifestTables.DestinyPowerCapDefinition[ver.powerCapHash].powerCap,
                   tierType: def.inventory?.tierTypeName,
-                })
-            ));
+                }))
+            );
       }
-
-
 
       setItems(payload);
     }
