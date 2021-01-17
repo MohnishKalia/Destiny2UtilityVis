@@ -45,12 +45,14 @@ function App() {
         if (hash)
           payload[cat] = Object.values(manifestTables.DestinyInventoryItemDefinition)
             .filter(def => def.itemCategoryHashes?.includes(hash) && tiers.includes(def.inventory?.tierType ?? 0))
-            .map(def => ({
-              name: def.displayProperties.name,
-              description: def.displayProperties.description,
-              quality: def.quality?.versions.map(ver => manifestTables.DestinyPowerCapDefinition[ver.powerCapHash].powerCap),
-              tierType: def.inventory?.tierTypeName,
-            }));
+            .flatMap(def => 
+                def.quality?.versions.map(ver => ({
+                  name: def.displayProperties.name,
+                  description: def.displayProperties.description,
+                  powerCap: manifestTables.DestinyPowerCapDefinition[ver.powerCapHash].powerCap,
+                  tierType: def.inventory?.tierTypeName,
+                })
+            ));
       }
 
 
