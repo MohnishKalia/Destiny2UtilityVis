@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getDestinyManifest, getDestinyManifestSlice, HttpClient, HttpClientConfig } from 'bungie-api-ts/destiny2';
-import RJW from 'react-json-view';
+import DataGrid from 'react-data-grid';
+import 'react-data-grid/dist/react-data-grid.css';
 import './App.css';
 
 const $http: HttpClient = async (config: HttpClientConfig) => {
-    // console.log(process.env.REACT_APP_API_KEY);
     const res = await fetch(
         `https://cors-anywhere.herokuapp.com/${config.url}`
         // config.url
@@ -16,11 +16,24 @@ const $http: HttpClient = async (config: HttpClientConfig) => {
     return res.json();
 }
 
+interface DTO {
+    type: string;
+    name: string;
+    description: string;
+    powerCap: number;
+    season: number;
+    tierTypeName: string | undefined;
+}
+
 function App() {
-    const [items, setItems] = useState({});
+    const [items, setItems] = useState<DTO[]>([]);
 
     useEffect(() => {
         async function getData() {
+            const res = await fetch('https://raw.githubusercontent.com/DestinyItemManager/DIM/master/src/data/d2/lightcap-to-season.json');
+            const cap2season: { [key: string]: number } = await res.json();
+
+
             const destinyManifest = await getDestinyManifest($http);
             const manifestTables = await getDestinyManifestSlice($http, {
                 destinyManifest: destinyManifest.Response,
@@ -28,56 +41,62 @@ function App() {
                 language: 'en'
             });
 
-            const categories = [
-                "Armor",
-                "Weapon",
-            ] as const
+            console.log(manifestTables.DestinySeasonDefinition);
+
+            const categoryHashes = Object.values(manifestTables.DestinyItemCategoryDefinition)
+                .filter(def => ["Weapon", "Armor"].includes(def.shortTitle))
+                .map(def => def.hash);
 
             const tiers = [
                 5, // legendary
                 6, // exotic
             ];
 
-            const payload: { [key: string]: any } = {};
+            const arr = Object.values(manifestTables.DestinyInventoryItemDefinition)
+                .filter(def => def.itemCategoryHashes?.some(hash => categoryHashes.includes(hash)) && tiers.includes(def.inventory?.tierType ?? 0)) // is a legendary/exotic armor or weapon
+                .flatMap(def =>
+                    def.quality?.versions.map(ver => {
+                        const { displayProperties: { name, description }, inventory, itemCategoryHashes } = def;
 
-            for (const cat of categories) {
-                const hash = Object.values(manifestTables.DestinyItemCategoryDefinition).find(def => def.shortTitle === cat)?.hash;
-                if (hash)
-                    payload[cat] = Object.values(manifestTables.DestinyInventoryItemDefinition)
-                        .filter(def => def.itemCategoryHashes?.includes(hash) && tiers.includes(def.inventory?.tierType ?? 0)) // is a legendary/exotic armor or weapon
-                        .flatMap(def =>
-                            def.quality?.versions.map(ver => {
-                                const { displayProperties: { name, description }, seasonHash, inventory } = def;
+                        const { powerCap } = manifestTables.DestinyPowerCapDefinition[ver.powerCapHash];
 
-                                const { powerCap } = manifestTables.DestinyPowerCapDefinition[ver.powerCapHash];
+                        if (!inventory)
+                            console.error("Item has no inventory data", def, ver);
 
-                                if (!inventory)
-                                    console.error("Item has no inventory data", def, ver);
-                                if (seasonHash === undefined)
-                                    console.error("Item has no season hash", def, ver);
-
-                                return {
-                                    name,
-                                    description,
-                                    powerCap,
-                                    tierTypeName: inventory?.tierTypeName,
-                                    seasonNumber: seasonHash && manifestTables.DestinySeasonDefinition[seasonHash].seasonNumber
-                                };
-                            })
-                        );
-            }
+                        return {
+                            type: itemCategoryHashes?.includes(categoryHashes[0]) ? 'Weapon' : 'Armor',
+                            name,
+                            description,
+                            powerCap,
+                            season: cap2season[`${powerCap}`],
+                            tierTypeName: inventory?.tierTypeName,
+                        };
+                    })
+                )
+                .filter(dto => !!dto) as DTO[];
             // see 718 and DestinySeasonDefinition 7301
 
-            setItems(payload);
+            setItems(arr);
         }
 
         getData();
     }, []);
 
     return (
-        <>
-            <RJW src={items} />
-        </>
+        <DataGrid
+            columns={[
+                { key: 'type', name: 'type' },
+                { key: 'name', name: 'name' },
+                { key: 'description', name: 'description' },
+                { key: 'powerCap', name: 'powerCap' },
+                { key: 'season', name: 'season' },
+                { key: 'tierTypeName', name: 'tierTypeName' },
+            ]}
+            rows={items.map((dto, id) => ({ id, ...dto }))}
+            defaultColumnOptions={{
+                sortable: true,
+            }}
+        />
     );
 }
 
